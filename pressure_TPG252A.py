@@ -3,7 +3,7 @@
 # python script to read the pressure with a                  //
 # Pfeiffer Vacuum Dual Gauge TPG 252 A Controller, BTG28270  //
 #                                                            //
-# Last modifications: 12.01.2019 by R.Berner                 //
+# Last modifications: 16.01.2019 by R.Berner                 //
 #                                                            //
 # ////////////////////////////////////////////////////////// //
 
@@ -13,52 +13,129 @@ import time
 
 # configure the serial connections (the parameters differs on the device you are connecting to)
 ser = serial.Serial(
-    port='/dev/ttyUSB0',
+    port='/dev/ttyUSB2',
     baudrate=9600,
     parity=serial.PARITY_NONE,
     stopbits=serial.STOPBITS_ONE,
     bytesize=serial.EIGHTBITS
 )
 
-while ser.inWaiting() > 0:
-    ser.readline()
+#ser.isOpen()
 
-ser.isOpen()
+#print "Resetting device"
+#ser.write("RES,1")
+#while ser.inWaiting():
+#    print ser.readline()
+#    time.sleep(0.1)
 
-print("Resetting device")
-ser.write("RES\r\n")
-time.sleep(1)
-ser.readline()
+#print "Automatically enable/disable sensors 1,2"
+#ser.write("SEN,2,2")
+#while ser.inWaiting():
+#    print ser.readline()
+#    time.sleep(0.1)
 
-#print("I\\O-test (6s) ... ")
+#print "Set measurement unit to mbar"
+#ser.write("UNI,2")
+#while ser.inWaiting():
+#    print ser.readline()
+#    time.sleep(0.1)
+
+#print "Set entry lock function off"
+#ser.write("LOC,0")
+#while ser.inWaiting():
+#    print ser.readline()
+#    time.sleep(0.1)
+
+#print "Set rate to 9600 Baud"
+#ser.write("BAU,4")
+#while ser.inWaiting():
+#    print ser.readline()
+#    time.sleep(0.1)
+
+#print "Set filter time constant to normal"
+#ser.write("FIL,1,1")
+#while ser.inWaiting():
+#    print ser.readline()
+#    time.sleep(0.1)
+
+#print "Set calibration factor"
+#ser.write("CAL,1.000,1.000")
+#while ser.inWaiting():
+#    print ser.readline()
+#    time.sleep(0.1)
+
+#print "Set range to 2 bar"
+#ser.write("FSR,4,4")
+#while ser.inWaiting():
+#    print ser.readline()
+#    time.sleep(0.1)
+
+#print "Set offset correction"
+#ser.write("OFC,0,0")
+#while ser.inWaiting():
+#    ser.readline()
+#    time.sleep(0.1)
+
+#print "Test program"
+#ser.write("RST")
+#while ser.inWaiting():
+#    ser.readline()
+#time.sleep(0.1)
+
+#print("I\\O-test (6s)")
 #ser.write("IOT\r\n")
-#time.sleep(6)
-#ser.readline()
+#while ser.inWaiting():
+    #ser.readline()
+    #time.sleep(6)
 
-print("Enable sensor 1")
-ser.write("SEN,1,2\r\n")
-time.sleep(1)
-ser.readline()
+#print("Enable continuous output mode")
+#ser.write("COM")
+#while ser.inWaiting():
+    #ser.readline()
+    #time.sleep(0.1)
 
-print("Enable continuous output mode")
-ser.write("COM\r\n")
-time.sleep(1)
-ser.readline()
-
-print("Access sensor 1")
-ser.write("PR1\r\n")
-time.sleep(1)
-
-while ser.inWaiting() > 0:
+ser.write("PRX")
+while ser.inWaiting():
     ser.readline()
+time.sleep(1)
 
 while 1:
-    ser.write("\x05\r\n")
-    time.sleep(1)
-    while ser.inWaiting() > 9:
-        value = ser.readline()[2:10]
-        if value < 0.:
-            value = 0.
-        print value
-        post_bar = "pressure_bar,sensor=1,pos=module value=" + str(value)
-        subprocess.call(["curl", "-i", "-XPOST", "lhepdaq2.unibe.ch:8086/write?db=module_zero_run_jan2019", "--data-binary", post_bar])
+    ser.write("\x05\r\n") # Request for data transmission (see manual p. 5)
+    while ser.inWaiting() > 0:
+        answer = ser.readline()
+        try:
+            statusCode_p1 = int(answer.split(',')[0])
+            p1 = float(answer.split(',')[1])
+            statusCode_p2 = int(answer.split(',')[2])
+            p2 = float(answer.split(',')[3])
+
+            # Send data to database (onlz if data is of good qualitz, e.g. statusCode==0)
+            if statusCode_p1==0 and p1>=0.:
+                print "p1 =", p1, "mbar"
+                post1_bar = "pressure_bar,sensor=1,pos=module value=" + str(p1)
+                subprocess.call(["curl", "-i", "-XPOST", "lhepdaq2.unibe.ch:8086/write?db=module_zero_run_jan2019", "--data-binary", post1_bar])
+            if statusCode_p1==1: print "Sensor 1: Underrange"
+            if statusCode_p1==2: print "Sensor 1: Overrange"
+            if statusCode_p1==3: print "Sensor 1: Sensor error"
+            if statusCode_p1==4: print "Sensor 1: Sensor off"
+            if statusCode_p1==5: print "Sensor 1: No sensor (output: 5,2000E-2)"
+            if statusCode_p1==6: print "Sensor 1: Identification error"
+
+            if statusCode_p2==0 and p2>=0.:
+                print "p2 =", p2, "mbar"
+                post2_bar = "pressure_bar,sensor=2,pos=atmosphere value=" + str(p2)
+                subprocess.call(["curl", "-i", "-XPOST", "lhepdaq2.unibe.ch:8086/write?db=module_zero_run_jan2019", "--data-binary", post2_bar])
+            if statusCode_p2==1: print "Sensor 2: Underrange"
+            if statusCode_p2==2: print "Sensor 2: Overrange"
+            if statusCode_p2==3: print "Sensor 2: Sensor error"
+            if statusCode_p2==4: print "Sensor 2: Sensor off"
+            if statusCode_p2==5: print "Sensor 2: No sensor (output: 5,2000E-2)"
+            if statusCode_p2==6: print "Sensor 2: Identification error"
+
+            time.sleep(1)
+
+        except (ValueError,IndexError):
+            #print "error"
+            pass
+
+        time.sleep(1)
