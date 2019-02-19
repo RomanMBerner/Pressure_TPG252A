@@ -3,13 +3,17 @@
 # python script to read the pressure with a                  //
 # Pfeiffer Vacuum Dual Gauge TPG 252 A Controller, BTG28270  //
 #                                                            //
-# Last modifications: 16.01.2019 by R.Berner                 //
+# Last modifications: 19.02.2019 by R.Berner                 //
 #                                                            //
 # ////////////////////////////////////////////////////////// //
 
 import serial
 import subprocess
 import time
+
+# Define offset
+offset_p1 = 0.0
+offset_p2 = 0.0
 
 # configure the serial connections (the parameters differs on the device you are connecting to)
 ser = serial.Serial(
@@ -105,14 +109,14 @@ while 1:
         answer = ser.readline()
         try:
             statusCode_p1 = int(answer.split(',')[0])
-            p1 = float(answer.split(',')[1])
+            p1 = float(answer.split(',')[1]) + offset_p1
             statusCode_p2 = int(answer.split(',')[2])
-            p2 = float(answer.split(',')[3])
+            p2 = float(answer.split(',')[3]) + offset_p2
 
             # Send data to database (onlz if data is of good qualitz, e.g. statusCode==0)
             if statusCode_p1==0 and p1>=0.:
                 print "p1 =", p1, "mbar"
-                post1_bar = "pressure_bar,sensor=1,pos=module value=" + str(p1)
+                post1_bar = "pressure_bar,sensor=1,pos=atmosphere value=" + str(p1)
                 subprocess.call(["curl", "-i", "-XPOST", "lhepdaq2.unibe.ch:8086/write?db=module_zero_run_jan2019", "--data-binary", post1_bar])
             if statusCode_p1==1: print "Sensor 1: Underrange"
             if statusCode_p1==2: print "Sensor 1: Overrange"
@@ -123,7 +127,7 @@ while 1:
 
             if statusCode_p2==0 and p2>=0.:
                 print "p2 =", p2, "mbar"
-                post2_bar = "pressure_bar,sensor=2,pos=atmosphere value=" + str(p2)
+                post2_bar = "pressure_bar,sensor=2,pos=module value=" + str(p2)
                 subprocess.call(["curl", "-i", "-XPOST", "lhepdaq2.unibe.ch:8086/write?db=module_zero_run_jan2019", "--data-binary", post2_bar])
             if statusCode_p2==1: print "Sensor 2: Underrange"
             if statusCode_p2==2: print "Sensor 2: Overrange"
